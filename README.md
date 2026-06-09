@@ -6,13 +6,6 @@ The crate keeps the default parser path dependency-free. Text and binary parsing
 are enabled by default and can be disabled independently. Serde format support is
 available behind the `serde` feature.
 
-## Features
-
-- `std` *(default)* — enables `std`; disable it for `no_std`.
-- `text` *(default)* — the text (`.vdf`) tokenizer/parser and writer.
-- `binary` *(default)* — the binary KeyValues parser and writer.
-- `serde` *(default)* — `serde` `Serialize`/`Deserialize` support.
-
 ## `no_std`
 
 The crate is `no_std` + `alloc`. Disable default features to drop `std`:
