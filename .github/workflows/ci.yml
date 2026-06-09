@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Download items_game.txt
+        run: |
+          curl -L "https://raw.githubusercontent.com/SteamTracking/GameTracking-CS2/refs/heads/master/game/csgo/pak01_dir/scripts/items/items_game.txt" \
+            -o tests/fixtures/items_game.txt
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Tests
+        run: cargo nextest run --all-features
+
+      - name: Doc tests
+        run: cargo test --doc --all-features
+
+  no_std:
+    name: no_std build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: thumbv7em-none-eabi
+
+      - name: Build (no_std, all crate features)
+        run: cargo build --lib --no-default-features --features "text binary serde" --target thumbv7em-none-eabi
+
+      - name: Build (no_std, default features only)
+        run: cargo build --lib --no-default-features --target thumbv7em-none-eabi

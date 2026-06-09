@@ -1,0 +1,4 @@
+style_edition = "2024"
+merge_derives = false
+group_imports = "StdExternalCrate"
+use_field_init_shorthand = true

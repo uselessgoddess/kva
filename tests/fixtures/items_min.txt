@@ -1,0 +1,46 @@
+"items_game"
+{
+    "game_info"
+    {
+        "first_valid_class"        "2"
+        "last_valid_class"        "3"
+        "first_valid_item_slot"    "0"
+        "last_valid_item_slot"    "54"
+        "num_item_presets"        "4"
+        "max_num_stickers"        "5"
+        "max_num_patches"        "3"
+    }
+    "rarities"
+    {
+        "default"
+        {
+            "value"    "0"
+            "loc_key"    "Rarity_Default"
+        }
+        "common"
+        {
+            "value"        "1"
+            "loc_key"        "Rarity_Common"
+            "next_rarity"    "uncommon"
+        }
+    }
+    "paint_kits"
+    {
+        "0"
+        {
+            "name"            "default"
+            "description_string"    "#PaintKit_Default"
+            "wear_default"        "0.1"
+            "wear_remap_min"        "0.06"
+            "wear_remap_max"        "0.8"
+            "style"            "0"
+        }
+    }
+    "paint_kits"
+    {
+        "1"
+        {
+            "name"    "placeholder"
+        }
+    }
+}
