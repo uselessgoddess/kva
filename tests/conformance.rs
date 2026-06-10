@@ -1,3 +1,5 @@
+mod issues;
+
 use kva::text::Parser;
 use kva::{KvData, binary};
 use serde::Serialize;

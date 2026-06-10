@@ -445,6 +445,18 @@ impl<'de> de::Deserializer<'de> for ValueDeserializer<'_, 'de> {
                 visitor.visit_string(String::from_utf16(value).map_err(|_| Error::InvalidUtf16)?)
             }
             KvData::BinaryString(value) => visit_bytes(value, visitor),
+            // behave consistently regardless of `numeric_inference` in human readable
+            KvData::Int(_)
+            | KvData::Int64(_)
+            | KvData::UInt64(_)
+            | KvData::Float(_)
+            | KvData::Pointer(_)
+            | KvData::Color(_)
+                if self.human =>
+            {
+                let value = self.string_value()?;
+                visit_str(&value, visitor)
+            }
             KvData::Int(value) => visitor.visit_i32(*value),
             KvData::Int64(value) => visitor.visit_i64(*value),
             KvData::UInt64(value) => visitor.visit_u64(*value),

@@ -1,8 +1,4 @@
-use alloc::{
-    borrow::{Cow, ToOwned},
-    string::String,
-    vec::Vec,
-};
+use alloc::{borrow::Cow, string::String, vec::Vec};
 
 use crate::{Error, KvData, Result, types::KvEntry};
 
@@ -256,7 +252,10 @@ impl<'a> Parser<'a> {
                     });
                 }
                 b'\\' => {
-                    let out = out.get_or_insert_with(|| self.input[start..self.pos].to_owned());
+                    // flush literal run accumulated since the previous escape
+                    // before appending the decoded escape.
+                    let out = out.get_or_insert_with(String::new);
+                    out.push_str(&self.input[segment_start..self.pos]);
                     self.pos += 1;
 
                     let Some(ch) = self.input[self.pos..].chars().next() else {
