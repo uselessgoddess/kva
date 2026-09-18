@@ -2,70 +2,102 @@ use alloc::{borrow::Cow, string::String, vec::Vec};
 
 use crate::{Error, KvData, Result, types::KvEntry};
 
-#[repr(u8)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum KvBinaryType {
-    Compound = 0,
-    String = 1,
-    Int = 2,
-    Float = 3,
-    Pointer = 4,
-    WideString = 5,
-    Color = 6,
-    UInt64 = 7,
-    End = 8,
-    BinaryString = 9,
-    Int64 = 10,
+/// Valve writes binary keyvalues two ways, and the tag numbering differs past 7
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum Dialect {
+    /// Steam binary vdf — `appinfo.vdf`, `shortcuts.vdf`, microtxn payloads
+    #[default]
+    Vdf,
+    /// Source `KeyValues::WriteAsBinary` — compiled kv, game coordinator price sheets
+    Source,
 }
 
-impl TryFrom<u8> for KvBinaryType {
-    type Error = Error;
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Tag {
+    Compound,
+    String,
+    Int,
+    Float,
+    Pointer,
+    WideString,
+    Color,
+    UInt64,
+    BinaryString,
+    Int64,
+    Byte,
+    Zero,
+    One,
+    End,
+}
 
-    fn try_from(value: u8) -> core::result::Result<Self, Self::Error> {
-        match value {
-            0 => Ok(Self::Compound),
-            1 => Ok(Self::String),
-            2 => Ok(Self::Int),
-            3 => Ok(Self::Float),
-            4 => Ok(Self::Pointer),
-            5 => Ok(Self::WideString),
-            6 => Ok(Self::Color),
-            7 => Ok(Self::UInt64),
-            8 => Ok(Self::End),
-            9 => Ok(Self::BinaryString),
-            10 => Ok(Self::Int64),
-            ty => Err(Error::InvalidType(ty)),
-        }
+impl Dialect {
+    fn tag(self, byte: u8) -> Result<Tag> {
+        Ok(match (self, byte) {
+            (_, 0) => Tag::Compound,
+            (_, 1) => Tag::String,
+            (_, 2) => Tag::Int,
+            (_, 3) => Tag::Float,
+            (_, 4) => Tag::Pointer,
+            (_, 5) => Tag::WideString,
+            (_, 6) => Tag::Color,
+            (_, 7) => Tag::UInt64,
+            (Self::Vdf, 8) => Tag::End,
+            (Self::Vdf, 9) => Tag::BinaryString,
+            (Self::Vdf, 10) => Tag::Int64,
+            (Self::Source, 8) => Tag::Byte,
+            (Self::Source, 9) => Tag::Zero,
+            (Self::Source, 10) => Tag::One,
+            (Self::Source, 11) => Tag::End,
+            _ => return Err(Error::InvalidType(byte)),
+        })
     }
 }
 
 pub struct Parser<'a> {
     buf: &'a [u8],
     pos: usize,
+    dialect: Dialect,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(buf: &'a [u8]) -> Self {
-        Self { buf, pos: 0 }
+        Self {
+            buf,
+            pos: 0,
+            dialect: Dialect::Vdf,
+        }
+    }
+
+    pub fn source(buf: &'a [u8]) -> Self {
+        Self::new(buf).dialect(Dialect::Source)
+    }
+
+    pub fn dialect(mut self, dialect: Dialect) -> Self {
+        self.dialect = dialect;
+        self
     }
 
     pub fn parse(&mut self) -> Result<Option<KvEntry<'a>>> {
         self.parse_entry()
     }
 
-    fn parse_data(&mut self, ty: KvBinaryType) -> Result<KvData<'a>> {
-        match ty {
-            KvBinaryType::Compound => Ok(KvData::Compound(self.parse_compound()?)),
-            KvBinaryType::String => Ok(KvData::String(self.read_cow()?)),
-            KvBinaryType::WideString => Ok(KvData::WideString(self.read_wide_string()?)),
-            KvBinaryType::BinaryString => Ok(KvData::BinaryString(self.read_binary_string()?)),
-            KvBinaryType::Float => Ok(KvData::Float(self.read_f32_le()?)),
-            KvBinaryType::Color => Ok(KvData::Color(self.read_u32_le()?)),
-            KvBinaryType::Int => Ok(KvData::Int(self.read_i32_le()?)),
-            KvBinaryType::UInt64 => Ok(KvData::UInt64(self.read_u64_le()?)),
-            KvBinaryType::Int64 => Ok(KvData::Int64(self.read_i64_le()?)),
-            KvBinaryType::Pointer => Ok(KvData::Pointer(self.read_u32_le()? as usize)),
-            KvBinaryType::End => Err(Error::UnexpectedEnd),
+    fn parse_data(&mut self, tag: Tag) -> Result<KvData<'a>> {
+        match tag {
+            Tag::Compound => Ok(KvData::Compound(self.parse_compound()?)),
+            Tag::String => Ok(KvData::String(self.read_cow()?)),
+            Tag::WideString => Ok(KvData::WideString(self.read_wide_string()?)),
+            Tag::BinaryString => Ok(KvData::BinaryString(self.read_binary_string()?)),
+            Tag::Float => Ok(KvData::Float(self.read_f32_le()?)),
+            Tag::Color => Ok(KvData::Color(self.read_u32_le()?)),
+            Tag::Int => Ok(KvData::Int(self.read_i32_le()?)),
+            Tag::UInt64 => Ok(KvData::UInt64(self.read_u64_le()?)),
+            Tag::Int64 => Ok(KvData::Int64(self.read_i64_le()?)),
+            Tag::Pointer => Ok(KvData::Pointer(self.read_u32_le()? as usize)),
+            // 8/9/10 encode an int, they are not types — valve's reader retags them TYPE_INT too
+            Tag::Byte => Ok(KvData::Int(self.read_u8()?.into())),
+            Tag::Zero => Ok(KvData::Int(0)),
+            Tag::One => Ok(KvData::Int(1)),
+            Tag::End => Err(Error::UnexpectedEnd),
         }
     }
 
@@ -80,13 +112,13 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_entry(&mut self) -> Result<Option<KvEntry<'a>>> {
-        let ty = KvBinaryType::try_from(self.read_u8()?)?;
-        if matches!(ty, KvBinaryType::End) {
+        let tag = self.dialect.tag(self.read_u8()?)?;
+        if matches!(tag, Tag::End) {
             return Ok(None);
         }
 
         let name = self.read_cow()?;
-        let data = self.parse_data(ty)?;
+        let data = self.parse_data(tag)?;
         Ok(Some(KvEntry { name, data }))
     }
 
@@ -161,10 +193,8 @@ impl<'a> Parser<'a> {
         }
 
         let bytes = self.take(len.checked_mul(2).ok_or(Error::UnexpectedEof)?)?;
-        let words = bytes
-            .chunks_exact(2)
-            .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
-            .collect();
+        let (words, _) = bytes.as_chunks::<2>();
+        let words = words.iter().copied().map(u16::from_le_bytes).collect();
         Ok(Cow::Owned(words))
     }
 }

@@ -33,6 +33,22 @@ assert_eq!(weapon.name, "ak47");
 assert_eq!(weapon.attrs["damage"], "36");
 ```
 
+## Binary dialects
+
+Valve ships two binary writers whose tags diverge past `7`. `Parser::new` reads
+Steam's binary VDF (`appinfo.vdf`, `shortcuts.vdf`, microtransaction payloads);
+`Parser::source` reads Source's `KeyValues::WriteAsBinary`, which spends tags
+`8`–`10` on compiled small ints and ends a compound with `11`:
+
+```rust
+use kva::binary::Parser;
+
+let sheet = b"\x00store\x00\x00prices\x00\x08USD\x00\xc7\x0b\x0b";
+let root = Parser::source(sheet).parse().unwrap().unwrap();
+
+assert_eq!(root.get_path("prices").unwrap().get_int("USD"), Some(199));
+```
+
 ## Escape sequences
 
 Escape handling is opt-in so that literal backslashes (e.g. Windows paths like

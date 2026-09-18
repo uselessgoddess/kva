@@ -2,7 +2,11 @@ use alloc::vec::Vec;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Error, KvEntry, Result, binary::Parser, de, ser};
+use crate::{
+    Error, KvEntry, Result,
+    binary::{Dialect, Parser},
+    de, ser,
+};
 
 pub type Serializer<'a> = ser::Serializer<'a, ser::Binary>;
 
@@ -17,7 +21,14 @@ pub fn from_slice<'de, T>(input: &'de [u8]) -> Result<T>
 where
     T: Deserialize<'de>,
 {
-    let mut deserializer = Deserializer::from_slice(input)?;
+    from_slice_dialect(input, Dialect::default())
+}
+
+pub fn from_slice_dialect<'de, T>(input: &'de [u8], dialect: Dialect) -> Result<T>
+where
+    T: Deserialize<'de>,
+{
+    let mut deserializer = Deserializer::from_slice_dialect(input, dialect)?;
     T::deserialize(&mut deserializer)
 }
 
@@ -27,8 +38,14 @@ pub struct Deserializer<'de> {
 
 impl<'de> Deserializer<'de> {
     pub fn from_slice(input: &'de [u8]) -> Result<Self> {
-        let mut parser = Parser::new(input);
-        let root = parser.parse()?.ok_or(Error::UnexpectedEnd)?;
+        Self::from_slice_dialect(input, Dialect::default())
+    }
+
+    pub fn from_slice_dialect(input: &'de [u8], dialect: Dialect) -> Result<Self> {
+        let root = Parser::new(input)
+            .dialect(dialect)
+            .parse()?
+            .ok_or(Error::UnexpectedEnd)?;
         Ok(Self { root })
     }
 }

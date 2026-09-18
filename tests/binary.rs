@@ -146,3 +146,69 @@ fn parse_fixture() {
     let appitems = root.get("appitems").unwrap();
     assert!(appitems.is_empty());
 }
+
+fn source_price_sheet() -> Vec<u8> {
+    let mut sheet = vec![0];
+    sheet.extend(b"store\0");
+    sheet.push(0);
+    sheet.extend(b"entries\0");
+    sheet.push(0);
+    sheet.extend(b"casket\0");
+    sheet.push(0);
+    sheet.extend(b"prices\0");
+    sheet.push(2);
+    sheet.extend(b"USD\0");
+    sheet.extend(199_i32.to_le_bytes());
+    sheet.push(8);
+    sheet.extend(b"PLN\0");
+    sheet.push(200);
+    sheet.push(9);
+    sheet.extend(b"free\0");
+    sheet.push(10);
+    sheet.extend(b"unit\0");
+    sheet.extend([11; 5]);
+    sheet
+}
+
+#[test]
+fn source_compiled_ints() {
+    let sheet = source_price_sheet();
+    let root = Parser::source(&sheet).parse().unwrap().unwrap();
+    let prices = root.get_path("entries/casket/prices").unwrap();
+
+    assert_eq!(root.name, "store");
+    assert_eq!(prices.get_int("USD"), Some(199));
+    assert_eq!(prices.get_int("PLN"), Some(200));
+    assert_eq!(prices.get_int("free"), Some(0));
+    assert_eq!(prices.get_int("unit"), Some(1));
+}
+
+#[test]
+fn source_rejects_vdf_end() {
+    let mut buf = vec![0];
+    buf.extend(b"root\0");
+    buf.push(8);
+
+    assert_eq!(
+        Parser::source(&buf).parse(),
+        Err(Error::UnterminatedCString)
+    );
+    assert!(Parser::new(&source_price_sheet()).parse().is_err());
+}
+
+#[test]
+fn dialect_defaults_to_vdf() {
+    use kva::binary::Dialect;
+
+    let mut buf = vec![10];
+    buf.extend(b"value\0");
+    buf.extend((-42_i64).to_le_bytes());
+
+    assert_eq!(Dialect::default(), Dialect::Vdf);
+    let entry = Parser::new(&buf)
+        .dialect(Dialect::default())
+        .parse()
+        .unwrap()
+        .unwrap();
+    assert_eq!(entry.data.as_int64(), Some(-42));
+}
