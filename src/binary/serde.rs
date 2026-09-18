@@ -14,7 +14,14 @@ pub fn to_vec<T>(name: &str, value: &T) -> Result<Vec<u8>>
 where
     T: Serialize + ?Sized,
 {
-    value.serialize(Serializer::new(name))
+    to_vec_dialect(name, value, Dialect::default())
+}
+
+pub fn to_vec_dialect<T>(name: &str, value: &T, dialect: Dialect) -> Result<Vec<u8>>
+where
+    T: Serialize + ?Sized,
+{
+    value.serialize(Serializer::with_dialect(name, dialect))
 }
 
 pub fn from_slice<'de, T>(input: &'de [u8]) -> Result<T>

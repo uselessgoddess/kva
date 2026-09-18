@@ -6,6 +6,8 @@ use alloc::{borrow::ToOwned, vec::Vec};
 #[cfg(feature = "text")]
 use core::fmt::Write as _;
 
+#[cfg(feature = "binary")]
+use crate::Dialect;
 use crate::{Error, KvData, KvEntry, Result};
 
 #[cfg(feature = "text")]
@@ -20,13 +22,13 @@ pub(crate) fn text_to_string(name: &str, data: KvData<'_>) -> Result<String> {
 }
 
 #[cfg(feature = "binary")]
-pub(crate) fn binary_to_vec(name: &str, data: KvData<'_>) -> Result<Vec<u8>> {
+pub(crate) fn binary_to_vec(name: &str, data: KvData<'_>, dialect: Dialect) -> Result<Vec<u8>> {
     let entry = KvEntry {
         name: Cow::Borrowed(name),
         data,
     };
     let mut out = Vec::new();
-    write_binary_entry(&mut out, &entry)?;
+    write_binary_entry(&mut out, &entry, dialect)?;
     Ok(out)
 }
 
@@ -107,36 +109,62 @@ fn write_quoted(out: &mut String, value: &str) {
 }
 
 #[cfg(feature = "binary")]
-fn write_binary_entry(out: &mut Vec<u8>, entry: &KvEntry<'_>) -> Result<()> {
-    out.push(binary_type(&entry.data)?);
-    write_cstring(out, &entry.name)?;
-    write_binary_data(out, &entry.data)
-}
-
-#[cfg(feature = "binary")]
-fn binary_type(data: &KvData<'_>) -> Result<u8> {
-    match data {
-        KvData::Compound(_) => Ok(0),
-        KvData::String(_) => Ok(1),
-        KvData::Int(_) => Ok(2),
-        KvData::Float(_) => Ok(3),
-        KvData::Pointer(_) => Ok(4),
-        KvData::WideString(_) => Ok(5),
-        KvData::Color(_) => Ok(6),
-        KvData::UInt64(_) => Ok(7),
-        KvData::BinaryString(_) => Ok(9),
-        KvData::Int64(_) => Ok(10),
+fn write_binary_entry(out: &mut Vec<u8>, entry: &KvEntry<'_>, dialect: Dialect) -> Result<()> {
+    if let (KvData::Int(value), Dialect::Source) = (&entry.data, dialect) {
+        return write_source_int(out, &entry.name, *value);
     }
+
+    out.push(binary_tag(&entry.data, dialect)?);
+    write_cstring(out, &entry.name)?;
+    write_binary_data(out, &entry.data, dialect)
+}
+
+// source folds a small int into the tag, keeping only the low bytes that still matter
+#[cfg(feature = "binary")]
+fn write_source_int(out: &mut Vec<u8>, name: &str, value: i32) -> Result<()> {
+    let bytes = value.to_le_bytes();
+    let (tag, payload) = match value {
+        0 => (9, &bytes[..0]),
+        1 => (10, &bytes[..0]),
+        2..=255 => (8, &bytes[..1]),
+        _ => (2, &bytes[..]),
+    };
+
+    out.push(tag);
+    write_cstring(out, name)?;
+    out.extend_from_slice(payload);
+    Ok(())
 }
 
 #[cfg(feature = "binary")]
-fn write_binary_data(out: &mut Vec<u8>, data: &KvData<'_>) -> Result<()> {
+fn binary_tag(data: &KvData<'_>, dialect: Dialect) -> Result<u8> {
+    Ok(match data {
+        KvData::Compound(_) => 0,
+        KvData::String(_) => 1,
+        KvData::Int(_) => 2,
+        KvData::Float(_) => 3,
+        KvData::Pointer(_) => 4,
+        KvData::WideString(_) => 5,
+        KvData::Color(_) => 6,
+        KvData::UInt64(_) => 7,
+        KvData::BinaryString(_) if dialect == Dialect::Vdf => 9,
+        KvData::Int64(_) if dialect == Dialect::Vdf => 10,
+        KvData::BinaryString(_) => return Err(Error::Unsupported("binary string in source kv")),
+        KvData::Int64(_) => return Err(Error::Unsupported("int64 in source kv")),
+    })
+}
+
+#[cfg(feature = "binary")]
+fn write_binary_data(out: &mut Vec<u8>, data: &KvData<'_>, dialect: Dialect) -> Result<()> {
     match data {
         KvData::Compound(entries) => {
             for entry in entries {
-                write_binary_entry(out, entry)?;
+                write_binary_entry(out, entry, dialect)?;
             }
-            out.push(8);
+            out.push(match dialect {
+                Dialect::Vdf => 8,
+                Dialect::Source => 11,
+            });
         }
         KvData::String(value) => write_cstring(out, value)?,
         KvData::WideString(value) => {

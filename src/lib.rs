@@ -7,7 +7,7 @@ mod error;
 mod types;
 
 pub use error::Error;
-pub use types::{KvData, KvEntry};
+pub use types::{Dialect, KvData, KvEntry};
 
 #[cfg(any(feature = "text", feature = "binary", feature = "serde"))]
 pub(crate) type Result<T> = core::result::Result<T, Error>;

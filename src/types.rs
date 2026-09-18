@@ -3,6 +3,16 @@ use alloc::{borrow::Cow, vec::Vec};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+/// Valve writes binary keyvalues two ways, and the tag numbering differs past 7
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum Dialect {
+    /// Steam binary vdf — `appinfo.vdf`, `shortcuts.vdf`, microtxn payloads
+    #[default]
+    Vdf,
+    /// Source `KeyValues::WriteAsBinary` — compiled kv, game coordinator price sheets
+    Source,
+}
+
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub enum KvData<'a> {

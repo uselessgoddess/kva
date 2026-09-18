@@ -8,20 +8,26 @@ use core::marker::PhantomData;
 
 use serde::{Serialize, ser};
 
-use crate::{Error, KvData, KvEntry, Result};
+use crate::{Dialect, Error, KvData, KvEntry, Result};
 
 pub struct Text;
 pub struct Binary;
 
 pub struct Serializer<'a, F> {
     name: &'a str,
+    dialect: Dialect,
     format: PhantomData<F>,
 }
 
 impl<'a, F> Serializer<'a, F> {
     pub fn new(name: &'a str) -> Self {
+        Self::with_dialect(name, Dialect::default())
+    }
+
+    pub fn with_dialect(name: &'a str, dialect: Dialect) -> Self {
         Self {
             name,
+            dialect,
             format: PhantomData,
         }
     }
@@ -32,7 +38,7 @@ pub trait Output {
 
     fn is_human_readable() -> bool;
 
-    fn finish(name: &str, data: KvData<'static>) -> Result<Self::Ok>;
+    fn finish(name: &str, data: KvData<'static>, dialect: Dialect) -> Result<Self::Ok>;
 }
 
 #[cfg(feature = "text")]
@@ -43,7 +49,7 @@ impl Output for Text {
         true
     }
 
-    fn finish(name: &str, data: KvData<'static>) -> Result<Self::Ok> {
+    fn finish(name: &str, data: KvData<'static>, _: Dialect) -> Result<Self::Ok> {
         crate::write::text_to_string(name, data)
     }
 }
@@ -56,8 +62,8 @@ impl Output for Binary {
         false
     }
 
-    fn finish(name: &str, data: KvData<'static>) -> Result<Self::Ok> {
-        crate::write::binary_to_vec(name, data)
+    fn finish(name: &str, data: KvData<'static>, dialect: Dialect) -> Result<Self::Ok> {
+        crate::write::binary_to_vec(name, data, dialect)
     }
 }
 
@@ -88,74 +94,78 @@ where
     }
 
     fn serialize_bool(self, value: bool) -> Result<Self::Ok> {
-        F::finish(self.name, bool_data(value))
+        F::finish(self.name, bool_data(value), self.dialect)
     }
 
     fn serialize_i8(self, value: i8) -> Result<Self::Ok> {
-        F::finish(self.name, KvData::Int(value.into()))
+        F::finish(self.name, KvData::Int(value.into()), self.dialect)
     }
 
     fn serialize_i16(self, value: i16) -> Result<Self::Ok> {
-        F::finish(self.name, KvData::Int(value.into()))
+        F::finish(self.name, KvData::Int(value.into()), self.dialect)
     }
 
     fn serialize_i32(self, value: i32) -> Result<Self::Ok> {
-        F::finish(self.name, KvData::Int(value))
+        F::finish(self.name, KvData::Int(value), self.dialect)
     }
 
     fn serialize_i64(self, value: i64) -> Result<Self::Ok> {
-        F::finish(self.name, i64_data(value))
+        F::finish(self.name, i64_data(value), self.dialect)
     }
 
     fn serialize_u8(self, value: u8) -> Result<Self::Ok> {
-        F::finish(self.name, KvData::Int(value.into()))
+        F::finish(self.name, KvData::Int(value.into()), self.dialect)
     }
 
     fn serialize_u16(self, value: u16) -> Result<Self::Ok> {
-        F::finish(self.name, KvData::Int(value.into()))
+        F::finish(self.name, KvData::Int(value.into()), self.dialect)
     }
 
     fn serialize_u32(self, value: u32) -> Result<Self::Ok> {
-        F::finish(self.name, u64_data(value.into()))
+        F::finish(self.name, u64_data(value.into()), self.dialect)
     }
 
     fn serialize_u64(self, value: u64) -> Result<Self::Ok> {
-        F::finish(self.name, KvData::UInt64(value))
+        F::finish(self.name, KvData::UInt64(value), self.dialect)
     }
 
     fn serialize_f32(self, value: f32) -> Result<Self::Ok> {
-        F::finish(self.name, KvData::Float(value))
+        F::finish(self.name, KvData::Float(value), self.dialect)
     }
 
     fn serialize_f64(self, value: f64) -> Result<Self::Ok> {
-        F::finish(self.name, string_data(value.to_string()))
+        F::finish(self.name, string_data(value.to_string()), self.dialect)
     }
 
     fn serialize_char(self, value: char) -> Result<Self::Ok> {
-        F::finish(self.name, string_data(value.to_string()))
+        F::finish(self.name, string_data(value.to_string()), self.dialect)
     }
 
     fn serialize_str(self, value: &str) -> Result<Self::Ok> {
-        F::finish(self.name, string_data(value.to_owned()))
+        F::finish(self.name, string_data(value.to_owned()), self.dialect)
     }
 
     fn serialize_bytes(self, value: &[u8]) -> Result<Self::Ok> {
-        F::finish(self.name, KvData::BinaryString(Cow::Owned(value.to_vec())))
+        F::finish(
+            self.name,
+            KvData::BinaryString(Cow::Owned(value.to_vec())),
+            self.dialect,
+        )
     }
 
     fn serialize_none(self) -> Result<Self::Ok> {
-        F::finish(self.name, string_data(String::new()))
+        F::finish(self.name, string_data(String::new()), self.dialect)
     }
 
     fn serialize_some<T>(self, value: &T) -> Result<Self::Ok>
     where
         T: Serialize + ?Sized,
     {
-        F::finish(self.name, to_data::<_, F>(value)?)
+        F::finish(self.name, to_data::<_, F>(value)?, self.dialect)
     }
 
     fn serialize_unit(self) -> Result<Self::Ok> {
-        F::finish(self.name, string_data(String::new()))
+        F::finish(self.name, string_data(String::new()), self.dialect)
     }
 
     fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok> {
@@ -168,7 +178,7 @@ where
         _variant_index: u32,
         variant: &'static str,
     ) -> Result<Self::Ok> {
-        F::finish(self.name, string_data(variant.to_owned()))
+        F::finish(self.name, string_data(variant.to_owned()), self.dialect)
     }
 
     fn serialize_newtype_struct<T>(self, _name: &'static str, value: &T) -> Result<Self::Ok>
@@ -188,15 +198,19 @@ where
     where
         T: Serialize + ?Sized,
     {
-        F::finish(self.name, variant_data(variant, to_data::<_, F>(value)?))
+        F::finish(
+            self.name,
+            variant_data(variant, to_data::<_, F>(value)?),
+            self.dialect,
+        )
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq> {
-        Ok(RootCompoundSerializer::new(self.name))
+        Ok(RootCompoundSerializer::new(self.name, self.dialect))
     }
 
     fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple> {
-        Ok(RootCompoundSerializer::new(self.name))
+        Ok(RootCompoundSerializer::new(self.name, self.dialect))
     }
 
     fn serialize_tuple_struct(
@@ -204,7 +218,7 @@ where
         _name: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleStruct> {
-        Ok(RootCompoundSerializer::new(self.name))
+        Ok(RootCompoundSerializer::new(self.name, self.dialect))
     }
 
     fn serialize_tuple_variant(
@@ -214,15 +228,15 @@ where
         variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleVariant> {
-        Ok(RootVariantSerializer::new(self.name, variant))
+        Ok(RootVariantSerializer::new(self.name, variant, self.dialect))
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap> {
-        Ok(RootMapSerializer::new(self.name))
+        Ok(RootMapSerializer::new(self.name, self.dialect))
     }
 
     fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct> {
-        Ok(RootMapSerializer::new(self.name))
+        Ok(RootMapSerializer::new(self.name, self.dialect))
     }
 
     fn serialize_struct_variant(
@@ -232,20 +246,22 @@ where
         variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStructVariant> {
-        Ok(RootVariantSerializer::new(self.name, variant))
+        Ok(RootVariantSerializer::new(self.name, variant, self.dialect))
     }
 }
 
 pub struct RootCompoundSerializer<'a, F> {
     name: &'a str,
+    dialect: Dialect,
     inner: CompoundSerializer<F>,
     format: PhantomData<F>,
 }
 
 impl<'a, F> RootCompoundSerializer<'a, F> {
-    fn new(name: &'a str) -> Self {
+    fn new(name: &'a str, dialect: Dialect) -> Self {
         Self {
             name,
+            dialect,
             inner: CompoundSerializer::<F>::new(),
             format: PhantomData,
         }
@@ -267,7 +283,7 @@ where
     }
 
     fn end(self) -> Result<Self::Ok> {
-        F::finish(self.name, self.inner.end()?)
+        F::finish(self.name, self.inner.end()?, self.dialect)
     }
 }
 
@@ -286,7 +302,7 @@ where
     }
 
     fn end(self) -> Result<Self::Ok> {
-        F::finish(self.name, self.inner.end()?)
+        F::finish(self.name, self.inner.end()?, self.dialect)
     }
 }
 
@@ -305,19 +321,21 @@ where
     }
 
     fn end(self) -> Result<Self::Ok> {
-        F::finish(self.name, self.inner.end()?)
+        F::finish(self.name, self.inner.end()?, self.dialect)
     }
 }
 
 pub struct RootMapSerializer<'a, F> {
     name: &'a str,
+    dialect: Dialect,
     inner: MapSerializer<F>,
 }
 
 impl<'a, F> RootMapSerializer<'a, F> {
-    fn new(name: &'a str) -> Self {
+    fn new(name: &'a str, dialect: Dialect) -> Self {
         Self {
             name,
+            dialect,
             inner: MapSerializer::new(),
         }
     }
@@ -345,7 +363,7 @@ where
     }
 
     fn end(self) -> Result<Self::Ok> {
-        F::finish(self.name, self.inner.end()?)
+        F::finish(self.name, self.inner.end()?, self.dialect)
     }
 }
 
@@ -364,21 +382,23 @@ where
     }
 
     fn end(self) -> Result<Self::Ok> {
-        F::finish(self.name, self.inner.end()?)
+        F::finish(self.name, self.inner.end()?, self.dialect)
     }
 }
 
 pub struct RootVariantSerializer<'a, F> {
     name: &'a str,
+    dialect: Dialect,
     variant: &'static str,
     inner: CompoundSerializer<F>,
 }
 
 impl<'a, F> RootVariantSerializer<'a, F> {
-    fn new(name: &'a str, variant: &'static str) -> Self {
+    fn new(name: &'a str, variant: &'static str, dialect: Dialect) -> Self {
         Self {
             name,
             variant,
+            dialect,
             inner: CompoundSerializer::new(),
         }
     }
@@ -399,7 +419,11 @@ where
     }
 
     fn end(self) -> Result<Self::Ok> {
-        F::finish(self.name, variant_data(self.variant, self.inner.end()?))
+        F::finish(
+            self.name,
+            variant_data(self.variant, self.inner.end()?),
+            self.dialect,
+        )
     }
 }
 
@@ -419,7 +443,11 @@ where
     }
 
     fn end(self) -> Result<Self::Ok> {
-        F::finish(self.name, variant_data(self.variant, self.inner.end()?))
+        F::finish(
+            self.name,
+            variant_data(self.variant, self.inner.end()?),
+            self.dialect,
+        )
     }
 }
 

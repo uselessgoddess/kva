@@ -1,16 +1,6 @@
 use alloc::{borrow::Cow, string::String, vec::Vec};
 
-use crate::{Error, KvData, Result, types::KvEntry};
-
-/// Valve writes binary keyvalues two ways, and the tag numbering differs past 7
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum Dialect {
-    /// Steam binary vdf — `appinfo.vdf`, `shortcuts.vdf`, microtxn payloads
-    #[default]
-    Vdf,
-    /// Source `KeyValues::WriteAsBinary` — compiled kv, game coordinator price sheets
-    Source,
-}
+use crate::{Dialect, Error, KvData, Result, types::KvEntry};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Tag {

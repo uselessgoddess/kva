@@ -212,3 +212,52 @@ fn dialect_defaults_to_vdf() {
         .unwrap();
     assert_eq!(entry.data.as_int64(), Some(-42));
 }
+
+#[test]
+fn write_source_dialect() {
+    use std::collections::BTreeMap;
+
+    use kva::binary::{Dialect, to_vec_dialect};
+
+    let prices = BTreeMap::from([("USD", 199_u64), ("PLN", 755)]);
+    let sheet = BTreeMap::from([("entries", BTreeMap::from([("prices", prices)]))]);
+    let bytes = to_vec_dialect("store", &sheet, Dialect::Source).unwrap();
+
+    let root = Parser::source(&bytes).parse().unwrap().unwrap();
+    assert_eq!(
+        root.get_path("entries/prices").unwrap().get_int("USD"),
+        Some(199)
+    );
+    assert!(
+        Parser::new(&bytes).parse().is_err(),
+        "the vdf reader must not accept it"
+    );
+}
+
+#[test]
+fn compile_source_ints() {
+    use std::collections::BTreeMap;
+
+    use kva::binary::{Dialect, to_vec_dialect};
+
+    let small = BTreeMap::from([("zero", 0_i32), ("one", 1), ("byte", 255), ("wide", 256)]);
+    let bytes = to_vec_dialect("small", &small, Dialect::Source).unwrap();
+
+    assert_eq!(
+        bytes,
+        [
+            &b"\x00small\x00"[..],
+            b"\x08byte\x00\xff", // one byte behind the compiled tag
+            b"\x0aone\x00",      // the tag is the whole value
+            b"\x02wide\x00\x00\x01\x00\x00",
+            b"\x09zero\x00",
+            b"\x0b",
+        ]
+        .concat()
+    );
+
+    let root = Parser::source(&bytes).parse().unwrap().unwrap();
+    for (name, want) in [("zero", 0), ("one", 1), ("byte", 255), ("wide", 256)] {
+        assert_eq!(root.get_int(name), Some(want));
+    }
+}

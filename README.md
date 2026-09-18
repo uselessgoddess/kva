@@ -49,6 +49,9 @@ let root = Parser::source(sheet).parse().unwrap().unwrap();
 assert_eq!(root.get_path("prices").unwrap().get_int("USD"), Some(199));
 ```
 
+`to_vec_dialect` writes either one back, compiling small ints into the tag the
+way Source does.
+
 ## Escape sequences
 
 Escape handling is opt-in so that literal backslashes (e.g. Windows paths like
