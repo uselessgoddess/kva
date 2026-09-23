@@ -37,6 +37,53 @@ fn escape_sequences_are_opt_in() {
 }
 
 #[test]
+fn escaped_quotes_tokenized_raw() {
+    let input = r#""root" { "quote" "say \"hi\" now" "path" "C:\Games\Steam" }"#;
+    let mut parser = Parser::new(input);
+    let root = parser.parse().unwrap();
+
+    assert_eq!(root.get_str("quote"), Some(r#"say \"hi\" now"#));
+    assert_eq!(root.get_str("path"), Some(r"C:\Games\Steam"));
+}
+
+#[test]
+fn escaped_backslash_terminator() {
+    let input = r#""root" { "k" "a\\" "next" "b" }"#;
+    let mut parser = Parser::new(input);
+    let root = parser.parse().unwrap();
+
+    assert_eq!(root.get_str("k"), Some(r"a\\"));
+    assert_eq!(root.get_str("next"), Some("b"));
+}
+
+#[test]
+fn trailing_backslash_is_an_error() {
+    let mut parser = Parser::new(r#""root" { "k" "a\"#);
+    assert_eq!(parser.parse(), Err(kva::Error::UnexpectedEof));
+}
+
+#[test]
+fn localization_values_escapes() {
+    let input = r#"
+"lang"
+{
+    "Tokens"
+    {
+        "Cstrike_TitlesTXT_Alias_Not_Avail" "The \"%s1\"\nis not available for your team to buy"
+    }
+}
+"#;
+    let mut parser = Parser::new(input);
+    let root = parser.parse().unwrap();
+    let tokens = root.get("Tokens").unwrap();
+
+    assert_eq!(
+        tokens.get_str("Cstrike_TitlesTXT_Alias_Not_Avail"),
+        Some(r#"The \"%s1\"\nis not available for your team to buy"#)
+    );
+}
+
+#[test]
 fn infers_source_numeric_values() {
     let input = r#"
 "root"
