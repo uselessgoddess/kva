@@ -218,16 +218,24 @@ impl<'a> Parser<'a> {
 
         if !self.options.escape_sequences {
             while let Some(&byte) = self.input.as_bytes().get(self.pos) {
-                if byte == b'"' {
-                    let value = Cow::Borrowed(&self.input[start..self.pos]);
-                    self.pos += 1;
-                    return Ok(Token {
-                        kind: TokenKind::Atom(value),
-                        conditional: false,
-                    });
+                match byte {
+                    b'"' => {
+                        let value = Cow::Borrowed(&self.input[start..self.pos]);
+                        self.pos += 1;
+                        return Ok(Token {
+                            kind: TokenKind::Atom(value),
+                            conditional: false,
+                        });
+                    }
+                    b'\\' => {
+                        self.pos += 1;
+                        let Some(ch) = self.input[self.pos..].chars().next() else {
+                            return Err(Error::UnexpectedEof);
+                        };
+                        self.pos += ch.len_utf8();
+                    }
+                    _ => self.pos += 1,
                 }
-
-                self.pos += 1;
             }
 
             return Err(Error::UnexpectedEof);

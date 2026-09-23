@@ -54,15 +54,25 @@ way Source does.
 
 ## Escape sequences
 
-Escape handling is opt-in so that literal backslashes (e.g. Windows paths like
-`C:\Games\Steam`) survive by default. Enable it to decode values that embed
-escaped quotes, such as Source HUD / localization strings:
+Escaped quotes never end a quoted value, so Source HUD resources and
+localization files (`csgo_english.txt` is full of `\"`) parse out of the box.
+Backslashes are kept as written until decoding is enabled:
 
 ```rust
 use kva::text::Parser;
 
-let root = Parser::with_escape_sequences(r#""k" "say \"hi\"""#).parse().unwrap();
-assert_eq!(root.data.as_str(), Some(r#"say "hi""#));
+// escapes are tokenized, but the value keeps them as written
+let root = Parser::new(r#""root" { "say" "say \"hi\"" "path" "C:\Games\Steam" }"#)
+    .parse()
+    .unwrap();
+assert_eq!(root.get_str("say"), Some(r#"say \"hi\""#));
+assert_eq!(root.get_str("path"), Some(r"C:\Games\Steam"));
+
+// enable decoding to get the characters they stand for
+let root = Parser::with_escape_sequences(r#""root" { "say" "say \"hi\"" }"#)
+    .parse()
+    .unwrap();
+assert_eq!(root.get_str("say"), Some(r#"say "hi""#));
 ```
 
 ## `no_std`
